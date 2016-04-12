@@ -17,6 +17,10 @@
 #error TIMER_FREQ <= 1000 recommended
 #endif
 
+/* List of processes in THREAD_SLEEP state, that is, processes
+   that are sleeping */
+static struct list sleep_list;
+
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
 
@@ -29,12 +33,14 @@ static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 static void real_time_delay (int64_t num, int32_t denom);
+static void wake_threads(void);
 
 /* Sets up the timer to interrupt TIMER_FREQ times per second,
    and registers the corresponding interrupt. */
 void
 timer_init (void)
 {
+  list_init (&sleep_list);
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
 }
@@ -84,16 +90,22 @@ timer_elapsed (int64_t then)
   return timer_ticks () - then;
 }
 
-/* Sleeps for approximately TICKS timer ticks.  Interrupts must
-   be turned on. */
+/* Sleeps for approximately TICKS timer ticks. */
 void
 timer_sleep (int64_t ticks)
 {
-  int64_t start = timer_ticks ();
+  struct thread *t = thread_current ();
+  enum intr_level old_level;
 
-  ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks)
-    thread_yield ();
+  old_level = intr_disable ();
+
+  t->sleep_ticks = ticks;
+
+  list_push_front(&sleep_list, &t->elem);
+
+  thread_block(); 
+
+  intr_set_level (old_level);
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -172,6 +184,30 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+
+  wake_threads ();
+}
+
+static void 
+wake_threads(void)
+{
+  struct list_elem *e;
+
+  if (!list_empty(&sleep_list)) 
+  {
+    for (e = list_begin (&sleep_list); e != list_end (&sleep_list);
+         e = list_next (e))
+    {
+      struct thread *t = list_entry (e, struct thread, allelem);
+
+      t->sleep_ticks--;
+
+      if (t->sleep_ticks <= 0) {
+        list_remove(e);
+        thread_unblock(t);
+      }
+    }
+  }
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
