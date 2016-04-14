@@ -20,4 +20,4 @@ clean:
 	rm -rf build
 
 copy:
-	rsync -avz -e "ssh -p 2223" progos@localhost:~ ~/code/pintos-progos
+	rsync -avz -e "ssh -p 2223" ~/code/pintos-progos/threads ~/code/pintos-progos/devices ~/code/pintos-progos/userprog progos@localhost:~/pintos-progos

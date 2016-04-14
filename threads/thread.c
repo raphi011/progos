@@ -387,7 +387,7 @@ thread_get_recent_cpu (void)
   /* Not yet implemented. */
   return 0;
 }
-
+
 /* Idle thread.  Executes when no other thread is ready to run.
 
    The idle thread is initially put on the ready list by
@@ -455,6 +455,7 @@ running_thread (void)
 static bool
 is_thread (struct thread *t)
 {
+  /* printf("checking if is thread\n"); */
   return t != NULL && t->magic == THREAD_MAGIC;
 }
 

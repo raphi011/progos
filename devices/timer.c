@@ -101,7 +101,7 @@ timer_sleep (int64_t ticks)
 
   t->sleep_ticks = ticks;
 
-  list_push_front(&sleep_list, &t->elem);
+  list_push_front(&sleep_list, &t->sleepelem);
 
   thread_block(); 
 
@@ -191,6 +191,7 @@ timer_interrupt (struct intr_frame *args UNUSED)
 static void 
 wake_threads(void)
 {
+
   struct list_elem *e;
 
   if (!list_empty(&sleep_list)) 
@@ -198,7 +199,7 @@ wake_threads(void)
     for (e = list_begin (&sleep_list); e != list_end (&sleep_list);
          e = list_next (e))
     {
-      struct thread *t = list_entry (e, struct thread, allelem);
+      struct thread *t = list_entry (e, struct thread, sleepelem);
 
       t->sleep_ticks--;
 
