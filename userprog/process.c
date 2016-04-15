@@ -15,6 +15,7 @@
 #include "threads/init.h"
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
@@ -22,6 +23,8 @@
 /* data structure to communicate with the thread initializing a new process */
 struct start_aux_data {
   char *filename;
+  char **argv;
+  int argc;
   struct semaphore startup_sem;
   struct thread *parent_thread;
   struct process *new_process;
@@ -32,9 +35,10 @@ struct lock filesys_lock;
 
 /* prototypes */
 static thread_func start_process NO_RETURN;
-static bool load (char *filename, void (**eip) (void), void **esp);
-static bool setup_stack (void **esp);
+static bool load (int argc, char **argv, void (**eip) (void), void **esp);
+static bool setup_stack (void **esp, int argc, char **argv);
 static bool init_fd_table (struct fd_table * table);
+static char** parse_args (const char * aux, int *argc);
 
 /* Initialize the filesystem lock */
 void
@@ -64,25 +68,38 @@ process_current ()
    and support command strings such as "echo A B C". You
    will also need to change `load` and `setup_stack`. */
 tid_t
-process_execute (const char *filename)
+process_execute (const char *cmd)
 {
+  /* testing */
+  enum intr_level old_level;
+  old_level = intr_disable ();
+  /* testing */
   tid_t tid = TID_ERROR;
   char *fn_copy = NULL;
   struct start_aux_data *aux_data = NULL;
+
+  int argc = 0;
+  char **argv = parse_args(cmd, &argc);
+
 
   /* Setup the auxiliary data for starting up the new process */
   fn_copy = palloc_get_page (0);
   aux_data = palloc_get_page (0);
   if (aux_data == NULL || fn_copy == NULL)
     goto done;
-  strlcpy (fn_copy, filename, PGSIZE);
+  strlcpy (fn_copy, argv[0], PGSIZE);
   aux_data->filename = fn_copy;
+  aux_data->argv = argv;
+  aux_data->argc = argc; 
   aux_data->parent_thread = thread_current ();
   aux_data->new_process = NULL;
   sema_init (&aux_data->startup_sem, 0);
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (fn_copy, PRI_DEFAULT, start_process, aux_data);
+  /* testing */
+  intr_set_level (old_level);
+  /* testing */
   if (tid == TID_ERROR)
     goto done;
 
@@ -100,6 +117,42 @@ process_execute (const char *filename)
   palloc_free_page (fn_copy);
   palloc_free_page (aux_data);
   return tid;
+}
+
+static char** 
+parse_args (const char *aux, int *argc)
+{
+  char **argv = NULL;
+  char *token, *save_ptr;
+  int arg_cnt = 0;
+
+
+  /* Copy aux so we can tokenize it */
+
+  size_t len = strlen (aux) + 1;
+  char *aux_copy = malloc (len);
+  (void)strlcpy (aux_copy, aux, len);
+
+  /* Tokenize arguments and put them into argv */
+
+  for (token = strtok_r (aux_copy, " ", &save_ptr); token != NULL && arg_cnt <= 64; 
+       token = strtok_r (NULL, " ", &save_ptr))
+  {
+      argv = realloc(argv, sizeof (char*) * ++arg_cnt);
+
+      if (argv == NULL)
+          return NULL;
+
+      argv[arg_cnt - 1] = token;
+  }
+
+  /* add NULL as last argument */
+  argv = realloc (argv, sizeof (char*) * (arg_cnt + 1));
+  argv[arg_cnt] = NULL;
+
+  *argc = arg_cnt;
+
+  return argv;
 }
 
 /* A thread function that loads a user process and starts it
@@ -132,7 +185,7 @@ start_process (void *aux)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  if (! load (aux_data->filename, &if_.eip, &if_.esp)) {
+  if (! load (aux_data->argc, aux_data->argv, &if_.eip, &if_.esp)) {
     thread->process = NULL;
   } else {
     aux_data->new_process = thread->process;
@@ -354,14 +407,17 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
 bool
-load (char *file_name, void (**eip) (void), void **esp)
+load (int argc, char **argv, void (**eip) (void), void **esp)
 {
+
+
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
   struct file *file = NULL;
   off_t file_ofs;
   bool success = false;
   int i;
+  char *file_name = argv[0];
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
@@ -374,6 +430,8 @@ load (char *file_name, void (**eip) (void), void **esp)
 
   /* Open executable file. */
   file = filesys_open (file_name);
+
+
   if (file == NULL)
     goto done;
 
@@ -453,7 +511,7 @@ load (char *file_name, void (**eip) (void), void **esp)
   }
 
   /* Set up stack. */
-  if (!setup_stack (esp))
+  if (!setup_stack (esp, argc, argv))
     goto done;
 
   /* Start address. */
@@ -469,6 +527,8 @@ load (char *file_name, void (**eip) (void), void **esp)
     file_close (file);
   }
   lock_release (&filesys_lock);
+
+
   return success;
 }
 
@@ -580,11 +640,15 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory.
    You will implement this function in the Project 0.
-   Consider using `hex_dump` for debugging purposes */
+   Consider using `hex_dump` for debugging purposes
+   esp: stackpointer */
 static bool
-setup_stack (void **esp)
+setup_stack (void **esp, int argc, char **argv)
 {
   uint8_t *kpage = NULL;
+  int i;
+  size_t len;
+  char *argv_addresses[argc];
 
   kpage = palloc_get_page (PAL_USER | PAL_ZERO);
   if (kpage == NULL)
@@ -595,8 +659,37 @@ setup_stack (void **esp)
       return false;
   }
 
-  /* Currently we assume that 'argc = 0' */
-  *esp = PHYS_BASE - 12;
+  /* Copy parameters */
+  *esp = PHYS_BASE;
+
+  for (i = argc - 1; i >= 0; i--) 
+  {
+      len = strlen(argv[i]) + 1;
+    
+      *esp -= len;
+      argv_addresses[i] = *esp;
+      memcpy (*esp, argv[i], len); 
+  }
+
+  /* Byte align */
+  *esp -= ((uint32_t)*esp % 4);
+
+  /* Null pointer sentinel */
+  *esp -= 4;
+
+  for (i = argc - 1; i >= 0; i--)
+  { 
+      *esp -= sizeof (char *);
+      memcpy (*esp, &argv_addresses[i], 4); 
+  }
+
+  *esp -= sizeof(char **);
+  *((char **)(*esp)) = *esp + 4;
+  *esp -= sizeof(int *);
+  *((int *)(*esp)) = argc;
+
+  *esp -= sizeof(void *);
+  
 
   return true;
 }
