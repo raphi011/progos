@@ -99,14 +99,23 @@ timer_sleep (int64_t ticks)
 
   old_level = intr_disable ();
 
-  t->sleep_ticks = ticks;
+  t->sleep_until = timer_ticks() + ticks;
 
-  list_push_front(&sleep_list, &t->sleepelem);
+  list_insert_ordered(&sleep_list, &t->elem, (list_less_func *) &timer_sort_thread, NULL);
 
   thread_block(); 
 
   intr_set_level (old_level);
 }
+
+bool timer_sort_thread (const struct list_elem *cur,const struct list_elem *next,void *aux UNUSED)
+{
+  struct thread *a = list_entry(cur, struct thread, elem);
+  struct thread *b = list_entry(next, struct thread, elem);
+
+  return (a->sleep_until < b->sleep_until);
+}
+
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
    turned on. */
@@ -191,21 +200,23 @@ timer_interrupt (struct intr_frame *args UNUSED)
 static void 
 wake_threads(void)
 {
-
   struct list_elem *e;
+  int64_t current_ticks = timer_ticks();
 
   if (!list_empty(&sleep_list)) 
   {
-    for (e = list_begin (&sleep_list); e != list_end (&sleep_list);
-         e = list_next (e))
+    for (e = list_begin (&sleep_list); e != list_end (&sleep_list);)
     {
-      struct thread *t = list_entry (e, struct thread, sleepelem);
+      struct thread *t = list_entry (e, struct thread, elem);
 
-      t->sleep_ticks--;
-
-      if (t->sleep_ticks <= 0) {
-        list_remove(e);
+      if (t->sleep_until <= current_ticks) 
+      {
+        e = list_remove(e);
         thread_unblock(t);
+      }
+      else 
+      {
+        break;
       }
     }
   }
