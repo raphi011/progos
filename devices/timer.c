@@ -196,6 +196,8 @@ timer_interrupt (struct intr_frame *args UNUSED)
   wake_threads ();
 }
 
+/* Loops over sleep_list and wakes all threads where 
+   t-> sleep_until <= timer_ticks() */
 static void 
 wake_threads(void)
 {

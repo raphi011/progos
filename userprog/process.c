@@ -38,7 +38,7 @@ static thread_func start_process NO_RETURN;
 static bool load (int argc, char **argv, void (**eip) (void), void **esp);
 static bool setup_stack (void **esp, int argc, char **argv);
 static bool init_fd_table (struct fd_table * table);
-static char** parse_args (const char * aux, int *argc);
+static char** parse_args (char * aux, int *argc);
 
 /* Initialize the filesystem lock */
 void
@@ -74,8 +74,14 @@ process_execute (const char *cmd)
   char *fn_copy = NULL;
   struct start_aux_data *aux_data = NULL;
 
+  /* Copy aux so we can tokenize it */
+  size_t len = strlen (cmd) + 1;
+  char *params = malloc (len);
+  (void)strlcpy (params, cmd, len);
+
   int argc = 0;
-  char **argv = parse_args(cmd, &argc);
+
+  char **argv = parse_args(params, &argc);
 
 
   /* Setup the auxiliary data for starting up the new process */
@@ -109,23 +115,24 @@ process_execute (const char *cmd)
  done:
   palloc_free_page (fn_copy);
   palloc_free_page (aux_data);
+  free(params);
+  free(argv);
   return tid;
 }
 
+/* Splits aux in tokens and returns a pointer to the arguments,
+   the argument count is returend by reference in argc.
+   parses at most ARGS_MAX arguments */
 static char** 
-parse_args (const char *aux, int *argc)
+parse_args (char *aux, int *argc)
 {
   char **argv = NULL;
   char *token, *save_ptr;
   int arg_cnt = 0;
 
-  /* Copy aux so we can tokenize it */
-  size_t len = strlen (aux) + 1;
-  char *aux_copy = malloc (len);
-  (void)strlcpy (aux_copy, aux, len);
 
   /* Tokenize arguments and put them into argv */
-  for (token = strtok_r (aux_copy, " ", &save_ptr); token != NULL && arg_cnt <= ARGS_MAX; 
+  for (token = strtok_r (aux, " ", &save_ptr); token != NULL && arg_cnt <= ARGS_MAX; 
        token = strtok_r (NULL, " ", &save_ptr))
   {
       argv = realloc(argv, sizeof (char*) * ++arg_cnt);
@@ -135,10 +142,6 @@ parse_args (const char *aux, int *argc)
 
       argv[arg_cnt - 1] = token;
   }
-
-  /* add NULL as last argument */
-  argv = realloc (argv, sizeof (char*) * (arg_cnt + 1));
-  argv[arg_cnt] = NULL;
 
   *argc = arg_cnt;
 
@@ -391,8 +394,8 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
     uint32_t read_bytes, uint32_t zero_bytes,
     bool writable);
 
-/* Loads an ELF executable from file_name (the first word of
-   cmd) into the current thread.
+/* Loads an ELF executable from file_name (the first token in 
+   argv) into the current thread.
    Stores the executable's entry point into *EIP
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
@@ -673,11 +676,14 @@ setup_stack (void **esp, int argc, char **argv)
       memcpy (*esp, &argv_addresses[i], 4); 
   }
 
+  /* Argv */
   *esp -= sizeof(char **);
   *((char **)(*esp)) = *esp + 4;
+  /* Argc */
   *esp -= sizeof(int *);
   *((int *)(*esp)) = argc;
 
+  /* Fake return pointer */
   *esp -= sizeof(void *);
   
 
