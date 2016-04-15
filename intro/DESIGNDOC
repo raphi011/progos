@@ -13,39 +13,97 @@ Raphael Gruber <raphi011@gmail.com>
 >> If you have any preliminary comments on your submission, notes for the
 >> TAs, or extra credit, please give them here.
 
+Pointer arithmetic is scary..
+
 >> Please cite any offline or online sources you consulted while
 >> preparing your submission, other than the Pintos documentation, course
 >> text, lecture notes, and course staff.
+
+None.
 
 			     ALARM CLOCK
 			     ===========
 
 ---- DATA STRUCTURES ----
+>> Copy here the declaration of each new or changed `struct' or `struct'
+>> member, global or static variable, `typedef', or enumeration.
+>> Identify the purpose of each in 25 words or less.
 
->> A1: Copy here the declaration of each new or changed `struct' or
->> `struct' member, global or static variable, `typedef', or
->> enumeration.  Identify the purpose of each in 25 words or less.
+All threads that are currently sleeping are added to the sleep_list,
+they are ordered ascending by the thread's value 'sleep_until' to improve 
+wake up speed.
+
+
+    /* List of processes that are sleeping,
+       added by timer_sleep() */
+    static struct list sleep_list;
+
+When a thread calls timer_sleep, the amount of ticks is added to
+timer_ticks() and saved in 'sleep_until', as soon as 
+timer_ticks() >= (timer_ticks() + ticks) the thread will be woken as soon
+as possible.
+
+    struct thread
+    {
+       ...
+       int64_t sleep_until;                /* Time to sleep */
+       ...
+    };
+
 
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe what happens in a call to timer_sleep(),
 >> including the effects of the timer interrupt handler.
 
+All that timer_sleep() does is it adds the desired amount of ticks
+to sleep to timer_ticks() and saves that value in the struct
+thread->sleep_until, then adds it to the ordered list (sleep_until
+ascending) sleep_list and blocks the thread.
+
+The interrupt handler timer_interrupt() calls wake_threads(), this new
+function iterates of the sleep_list and unblocks all threads where 
+sleep_until <= current_ticks. 
+
 >> A3: What steps are taken to minimize the amount of time spent in
 >> the timer interrupt handler?
+
+(1.) Adding the sleeping threads to a seperate list which 
+(2.) is ordered by sleep_until, so that in most cases the loop can break
+     before iterating over all sleeping threads because it knows that
+     the next thread waits longer than the current one. Runtime is still
+     O(n) though, where n is the number of sleeping threads.
 
 ---- SYNCHRONIZATION ----
 
 >> A4: How are race conditions avoided when multiple threads call
 >> timer_sleep() simultaneously?
 
+Interrupts are disabled while adding the thread to the sleep_list,
+another possibility would have been adding a semaphore but because
+intr_disable() is necessary anyhow for thread_block() I didn't use
+one.
+
 >> A5: How are race conditions avoided when a timer interrupt occurs
 >> during a call to timer_sleep()?
+
+Interrupts are disabled.
+
 
 ---- RATIONALE ----
 
 >> A6: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
+
+My first implementation worked a bit different, instead of sleep_until,
+I've used sleep_ticks and save the amount of ticks the thread wanted to
+wait, so every time the timer_interrupt was called I decremented sleep_ticks
+of every sleeping thread and unblocked them if sleep_ticks <= 0.
+
+Needless to say that was very inefficient because I had to loop through all
+sleeping threads everytime and decrement the value. My current implementation
+is much faster because it doesn't need to decrement the value and doesn't loop
+over the hole list every tick.
 
 			   ARGUMENT PASSING
 			   ================
@@ -56,21 +114,50 @@ Raphael Gruber <raphi011@gmail.com>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+Adds the processes passed parameters and parameter count to the 
+start_aux_data, so they can be put on the stack.
+
+    struct start_aux_data 
+    {
+       ...
+       char **argv;
+       int argc;
+       ...
+    }
+
+Added max argument count macro for clarity.
+
+    #define ARGS_MAX 64                 /* max arg count for userprograms */
+
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe how you implemented argument parsing.  How do
 >> you arrange for the elements of argv[] to be in the right order?
 >> How do you avoid overflowing the stack page?
 
+To add the elements of argv to the stack backwards im using a for loop 
+which starts at the last element argv[argc-1] and decrements argc and esp
+along the way. I've attempting to avoid overflowing the stack in a very 
+trivial way: allowing at most ARGS_MAX parameters, doesn't work when there
+are very long parameters
+
+
 ---- RATIONALE ----
 
 >> A3: Why does Pintos implement strtok_r() but not strtok()?
+
+Because strtok_r is reentrant and better suited for work in a kernel. It
+takes an extra argument that is used to store state between calls instead
+of a global variable.
 
 >> A4: In Pintos, the kernel separates commands into a executable name
 >> and arguments.  In Unix-like systems, the shell does this
 >> separation.  Identify at least two advantages of the Unix approach.
 
-
+1. The shell can check if the programm exists before it tells the kernel
+   to execute a program.
+2. It can expand wildcards and make life easier passing arguments to a
+   program.
 
 			   SURVEY QUESTIONS
 			   ================
@@ -81,17 +168,29 @@ want--these questions are just to spur your thoughts.  You may also
 choose to respond anonymously in the course evaluations at the end of
 the quarter.
 
->> In your opinion, was this assignment, or any one of the three problems
+>> In your opinion, was this assignment, or any one of the two problems
 >> in it, too easy or too hard?  Did it take too long or too little time?
+
+I think as a first assignment it's probably necessary as an entry point 
+to the course. It took me many hours to implement both features.
 
 >> Did you find that working on a particular part of the assignment gave
 >> you greater insight into some aspect of OS design?
+
+Yes, I learn the most with practical assignments and even though it's 
+frustrating at times this will probably be one of my favorite courses.
 
 >> Is there some particular fact or hint we should give students in
 >> future quarters to help them solve the problems?  Conversely, did you
 >> find any of our guidance to be misleading?
 
+I think the course material is very informative and not at all misleading.
+
 >> Do you have any suggestions for the TAs to more effectively assist
 >> students, either for future quarters or the remaining projects?
+ 
+Lab hours would be great ..
 
 >> Any other comments?
+
+-

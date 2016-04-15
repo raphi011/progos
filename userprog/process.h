@@ -3,6 +3,8 @@
 
 #include "threads/thread.h"
 
+#define ARGS_MAX 64                      /* max arg count for userprograms */
+
 /* In the current implementation, the capacity is fixed to 1024 (PGSIZE/4) */
 struct fd_table {
     struct file** fds;

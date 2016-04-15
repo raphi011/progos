@@ -17,8 +17,8 @@
 #error TIMER_FREQ <= 1000 recommended
 #endif
 
-/* List of processes in THREAD_SLEEP state, that is, processes
-   that are sleeping */
+/* List of processes that are sleeping,
+   added by timer_sleep() */
 static struct list sleep_list;
 
 
@@ -98,12 +98,10 @@ timer_sleep (int64_t ticks)
   struct thread *t = thread_current ();
   enum intr_level old_level;
 
-  old_level = intr_disable ();
-
   t->sleep_until = timer_ticks() + ticks;
 
+  old_level = intr_disable ();
   list_insert_ordered(&sleep_list, &t->elem, (list_less_func *) &timer_sort_thread, NULL);
-
   thread_block(); 
 
   intr_set_level (old_level);

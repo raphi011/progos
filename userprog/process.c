@@ -119,16 +119,13 @@ parse_args (const char *aux, int *argc)
   char *token, *save_ptr;
   int arg_cnt = 0;
 
-
   /* Copy aux so we can tokenize it */
-
   size_t len = strlen (aux) + 1;
   char *aux_copy = malloc (len);
   (void)strlcpy (aux_copy, aux, len);
 
   /* Tokenize arguments and put them into argv */
-
-  for (token = strtok_r (aux_copy, " ", &save_ptr); token != NULL && arg_cnt <= 64; 
+  for (token = strtok_r (aux_copy, " ", &save_ptr); token != NULL && arg_cnt <= ARGS_MAX; 
        token = strtok_r (NULL, " ", &save_ptr))
   {
       argv = realloc(argv, sizeof (char*) * ++arg_cnt);
