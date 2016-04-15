@@ -455,7 +455,6 @@ running_thread (void)
 static bool
 is_thread (struct thread *t)
 {
-  /* printf("checking if is thread\n"); */
   return t != NULL && t->magic == THREAD_MAGIC;
 }
 

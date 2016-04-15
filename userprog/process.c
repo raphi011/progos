@@ -70,10 +70,6 @@ process_current ()
 tid_t
 process_execute (const char *cmd)
 {
-  /* testing */
-  enum intr_level old_level;
-  old_level = intr_disable ();
-  /* testing */
   tid_t tid = TID_ERROR;
   char *fn_copy = NULL;
   struct start_aux_data *aux_data = NULL;
@@ -97,9 +93,6 @@ process_execute (const char *cmd)
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (fn_copy, PRI_DEFAULT, start_process, aux_data);
-  /* testing */
-  intr_set_level (old_level);
-  /* testing */
   if (tid == TID_ERROR)
     goto done;
 
