@@ -232,6 +232,15 @@ thread_block (void)
   schedule ();
 }
 
+static bool 
+sort_thread(const struct list_elem *cur,const struct list_elem *next,void *aux UNUSED)
+{
+  struct thread *a = list_entry(cur, struct thread, elem);
+  struct thread *b = list_entry(next, struct thread, elem);
+
+  return (a->priority > b->priority);
+}
+
 /* Transitions a blocked thread T to the ready-to-run state.
    This is an error if T is not blocked.  (Use thread_yield() to
    make the running thread ready.)
@@ -249,10 +258,11 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  list_insert_ordered(&ready_list, &t->elem, (list_less_func *) &sort_thread, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
+
 
 /* Returns the name of the running thread. */
 const char *
@@ -348,6 +358,8 @@ void
 thread_set_priority (int new_priority)
 {
   thread_current ()->priority = new_priority;
+
+  schedule();
 }
 
 /* Returns the current thread's priority. */
