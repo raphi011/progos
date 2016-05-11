@@ -95,6 +95,11 @@ struct thread
     /* Shared between thread.c and synch.c */
     struct list_elem elem;              /* List element. */
 
+    /* priority scheduler */
+    struct lock *lock_wait;
+    struct list donations;
+    struct list_elem don_elem;
+
 #ifdef USERPROG
     /* Owned by userprog/process.c */
     struct process* process;            /* Process Structure */
@@ -111,11 +116,17 @@ struct thread
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
 
+bool thread_sort(const struct list_elem *,const struct list_elem *,void * UNUSED);
+
 void thread_init (void);
 void thread_start (void);
 
 void thread_tick (void);
 void thread_print_stats (void);
+
+int thread_get_priority_from(struct thread *);
+void thread_remove_donations (struct lock *);
+int thread_get_donated_priority (struct thread *t);
 
 typedef void thread_func (void *aux);
 tid_t thread_create (const char *name, int priority, thread_func *, void *);
