@@ -21,3 +21,8 @@ clean:
 
 copy:
 	rsync -avz -e "ssh -p 2223" ~/code/pintos-progos/threads ~/code/pintos-progos/devices ~/code/pintos-progos/userprog progos@localhost:~/pintos-progos
+
+copyserv:
+	make clean
+	rsync -avz -e "ssh -i ~/.ssh/tilab" ~/Code/progos/threads ~/Code/progos/devices ~/Code/progos/userprog progos:~/progos
+
