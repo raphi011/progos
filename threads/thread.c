@@ -243,7 +243,6 @@ thread_sort(const struct list_elem *cur,const struct list_elem *next,void *aux U
   struct thread *a = list_entry(cur, struct thread, elem);
   struct thread *b = list_entry(next, struct thread, elem);
 
-
   int priority_a = thread_get_priority_from(a);
   int priority_b = thread_get_priority_from(b);
 
@@ -403,8 +402,6 @@ thread_get_priority_from(struct thread* t)
 int
 thread_get_donated_priority (struct thread *t)
 {
-  ASSERT (is_thread (t));
-
   int highest_priority = -1;
 
   struct list_elem *e = list_begin (&t->donations);
@@ -423,6 +420,7 @@ thread_get_donated_priority (struct thread *t)
 
     e = list_next (e);
   }
+
 
   return highest_priority;
 }

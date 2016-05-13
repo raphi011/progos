@@ -219,16 +219,11 @@ lock_acquire (struct lock *lock)
 
   enum intr_level old_level = intr_disable();
 
-  if (!thread_mlfqs && lock->holder) 
+  if (lock->holder) 
   {
-      // add donation
       thread_current ()->lock_wait = lock;
 
       list_push_back (&lock->holder->donations, &thread_current ()->don_elem);
-
-      // list_insert_ordered(&lock->holder->donations,
-      //                     &thread_current()->don_elem,
-      //                     (list_less_func *) &thread_sort, NULL);
   }
 
   sema_down (&lock->semaphore);

@@ -67,25 +67,22 @@ of the list gets on the ready list -> has highest priority
 >> causes a priority donation.  How is nested donation handled?
 
 1) Current thread adds lock. 
-2) Pushes his donation on the lock holders list.
+2) Pushes his donation on the lock holders donation list.
 3) "Waits till lock is released"
 
-We go from the current thread to his donee and set him 
-as current thread and so on (as long as there are donees).
-The implementation is a recursive call of 
-thread_get_donated_priorities (for every donation)
+The donee's actual priority is not overwritten, instead if some thread
+calls get_priority_from(thread) the recursive function 
+thread_get_donated_priorities gets called and iterates of the nested
+donations and returns the highest priority
 
 >> B5: Describe the sequence of events when lock_release() is called
 >> on a lock that a higher-priority thread is waiting for.
 
-1) The Lock of the current thread gets deleted. 
-2) As long there are donations in the current thread get donee
-3) Is donee waiting for this lock
-4) If yes remove donee from list, if no get next donee
-5) Do this as long as there are donees
-6) Sort Threads waiting for the lock
-7) Unblock highest priority thread
-8) Schedule
+1) The reference to the current holder of the lock is removed. 
+2) All donations the current thread had received for this lock are removed.
+3) Sort the waiting threads by their priority
+4) Unblock highest priority thread
+5) Schedule
  
 ---- SYNCHRONIZATION ----
 
@@ -93,19 +90,20 @@ thread_get_donated_priorities (for every donation)
 >> how your implementation avoids it.  Can you use a lock to avoid
 >> this race?
 
-If the thread priority gets updated, interrupt handler could write to
-it at the same time -> race. We avoid it by disabling the interrupts.
-Not with this implemation, because a lock cant deactivate interrupts.
+If some donation was made while iterating over the list of donations there 
+could be a possible race condition, to prevent that we disabled interrupts.
 
 ---- RATIONALE ----
 
 >> B7: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
 
-It makes good use of the already given lists and structures (memory wise). 
-Not sure if its superior in other ways, the nested donations probably 
-take a long time, maybe faster if you dont iterator every time over all
-donees
+A thread's priority is only set by itself, no other thread touches it. 
+That way race conditions in set_priority are non existant. The drawback is
+that it needs more processing time because it needs to iterate over all
+donations everytime get_priority is called which can happen often, especially
+when threads are sorted. But we agreed that if the donation list stays small
+which it should be most of the time that disadvantage is insignificant.
 
 			   SURVEY QUESTIONS
 			   ================
