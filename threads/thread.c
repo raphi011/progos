@@ -408,10 +408,10 @@ thread_get_donated_priority (struct thread *t)
 
   while (e != list_end (&t->donations))
   {
-    struct thread *donee = list_entry (e, struct thread, don_elem);
+    struct thread *doner = list_entry (e, struct thread, don_elem);
 
-    int priority = donee->priority;
-    int parent_priority = thread_get_donated_priority (donee);
+    int priority = doner->priority;
+    int parent_priority = thread_get_donated_priority (doner);
 
     int higher = priority > parent_priority ? priority : parent_priority;
 
@@ -436,9 +436,9 @@ thread_remove_donations (struct lock * l)
 
   while (e != list_end (&t->donations))
   {
-    struct thread *donee = list_entry (e, struct thread, don_elem);
+    struct thread *doner = list_entry (e, struct thread, don_elem);
 
-    if (donee->lock_wait == l)
+    if (doner->lock_wait == l)
       e = list_remove (e);
     else
       e = list_next (e);

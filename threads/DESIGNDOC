@@ -43,6 +43,9 @@ In struct thread:
 >> Use ASCII art to diagram a nested donation.  (Alternately, submit a
 >> .png file.)
 
+We used the given Linkedlist, for tracking the donations. Every
+Thread has one as stated above.
+
 Thread Main: Name: Tm Priority: 31
 Thread 1:    Name: T1 Priority: 30 Lock: L1
 Thread 2:    Name: T2 Priority: 29 Lock L2
@@ -92,6 +95,13 @@ donations and returns the highest priority
 
 If some donation was made while iterating over the list of donations there 
 could be a possible race condition, to prevent that we disabled interrupts.
+
+With our implementation a lock would not work because we have to prevent another
+thread from changing the various donation lists, but because locks use the 
+donation lists themselves this would result in a deadlock. So for example if we
+would lock all donation lists while in set_priority and then try to release that
+lock it would not be possible because lock_release also needs to access the 
+donations.
 
 ---- RATIONALE ----
 
