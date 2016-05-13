@@ -33,7 +33,7 @@
 #include "threads/thread.h"
 
 static bool 
-sort_sema(const struct list_elem *,
+sema_sort(const struct list_elem *,
           const struct list_elem *,
           void * UNUSED);
 
@@ -73,12 +73,12 @@ sema_down (struct semaphore *sema)
 
   old_level = intr_disable ();
   while (sema->value == 0)
-    {
-      list_insert_ordered(&sema->waiters,
-                          &thread_current ()->elem,
-                          (list_less_func *) &thread_sort, NULL);
-      thread_block ();
-    }
+  {
+    list_insert_ordered (&sema->waiters,
+                        &thread_current ()->elem,
+                        (list_less_func *) &thread_sort, NULL);
+    thread_block ();
+  }
   sema->value--;
   intr_set_level (old_level);
 }
@@ -236,7 +236,7 @@ lock_acquire (struct lock *lock)
   thread_current ()->lock_wait = NULL; 
   lock->holder = thread_current ();
 
-  intr_set_level(old_level);
+  intr_set_level (old_level);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -273,12 +273,12 @@ lock_release (struct lock *lock)
   enum intr_level old_level = intr_disable();
 
   lock->holder = NULL;
-  // Remove all donations that are associated with this lock!
-  thread_remove_donations(lock);
+
+  thread_remove_donations (lock);
 
   sema_up (&lock->semaphore);
 
-  intr_set_level(old_level);
+  intr_set_level (old_level);
 }
 
 /* Returns true if the current thread holds LOCK, false
@@ -341,7 +341,7 @@ cond_wait (struct condition *cond, struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
 
   sema_init (&waiter.semaphore, 0);
-  list_insert_ordered(&cond->waiters, &waiter.elem, (list_less_func *) &sort_sema, NULL);
+  list_insert_ordered (&cond->waiters, &waiter.elem, (list_less_func *) &sema_sort, NULL);
   lock_release (lock);
   sema_down (&waiter.semaphore);
   lock_acquire (lock);
@@ -362,16 +362,16 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (!intr_context ());
   ASSERT (lock_held_by_current_thread (lock));
 
-  enum intr_level old_level = intr_disable();
+  enum intr_level old_level = intr_disable ();
 
   if (!list_empty (&cond->waiters))
 {
-    list_sort(&cond->waiters, (list_less_func *) &sort_sema, NULL);
+    list_sort (&cond->waiters, (list_less_func *) &sema_sort, NULL);
     sema_up (&list_entry (list_pop_front (&cond->waiters),
                           struct semaphore_elem, elem)->semaphore);
 }
 
-  intr_set_level(old_level);
+  intr_set_level (old_level);
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
@@ -390,35 +390,30 @@ cond_broadcast (struct condition *cond, struct lock *lock)
     cond_signal (cond, lock);
 }
 
+/* Sorts semaphores according to its highest waiting thread */
 static bool
-sort_sema(const struct list_elem *a,
+sema_sort(const struct list_elem *a,
           const struct list_elem *b,
           void *aux UNUSED)
 {
-  struct semaphore_elem *sa = list_entry(a, struct semaphore_elem, elem);
-  struct semaphore_elem *sb = list_entry(b, struct semaphore_elem, elem);
+  struct semaphore_elem *sa = list_entry (a, struct semaphore_elem, elem);
+  struct semaphore_elem *sb = list_entry (b, struct semaphore_elem, elem);
 
-  // Get semaphore with highest waiter priority
-  if ( list_empty(&sb->semaphore.waiters) )
-    {
+  if ( list_empty (&sb->semaphore.waiters) )
       return true;
-    }
-  if ( list_empty(&sa->semaphore.waiters) )
-    {
+
+  if ( list_empty (&sa->semaphore.waiters) )
       return false;
-    }
+
   list_sort(&sa->semaphore.waiters, (list_less_func *) &thread_sort,
             NULL);
   list_sort(&sb->semaphore.waiters, (list_less_func *) &thread_sort,
             NULL);
-  struct thread *ta = list_entry(list_front(&sa->semaphore.waiters),
+
+  struct thread *thread_a = list_entry (list_front (&sa->semaphore.waiters),
         			 struct thread, elem);
-  struct thread *tb = list_entry(list_front(&sb->semaphore.waiters),
+  struct thread *thread_b = list_entry (list_front (&sb->semaphore.waiters),
         			 struct thread, elem);
 
-  if (thread_get_priority_from(ta) > thread_get_priority_from (tb))
-  {
-    return true;
-  }
-  return false;
+  return thread_get_priority_from (thread_a) > thread_get_priority_from (thread_b);
 }
