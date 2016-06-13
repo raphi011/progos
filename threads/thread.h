@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include <hash.h>
 #include "threads/synch.h"
 
 /* States in a thread's life cycle. */
@@ -94,6 +95,8 @@ struct thread
 
     /* Shared between thread.c and synch.c */
     struct list_elem elem;              /* List element. */
+    struct hash pages;
+
 
     /* priority scheduler */
     struct lock *lock_wait;

@@ -33,6 +33,9 @@ struct process {
     size_t syscall_buffer_page_cnt;
 };
 
+/* load() helpers. */
+
+bool install_page (void *, void *, bool);
 void process_init (void);
 struct process* process_current (void);
 tid_t process_execute (const char *cmd);

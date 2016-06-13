@@ -5,6 +5,12 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/pte.h"
+#include "threads/vaddr.h"
+#include "vm/page.h"
+#include "userprog/process.h"
+
+
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -138,7 +144,7 @@ page_fault (struct intr_frame *f)
   asm ("movl %%cr2, %0" : "=r" (fault_addr));
 
   /* Turn interrupts back on (they were only off so that we could
-     be assured of reading CR2 before it changed). */
+     be assured of reading CR2 before it changed). */ //When did we turn them off? o_O?
   intr_enable ();
 
   /* Count page faults. */
@@ -153,6 +159,17 @@ page_fault (struct intr_frame *f)
      body, adding code that brings in the page to
      which fault_addr refers. */
   if (is_user_vaddr(fault_addr)) {
+
+    if(not_present){
+      if(!page_load(fault_addr,fault_addr)) {
+        thread_exit();
+      } else {
+        return;
+      }
+    }
+
+
+
     if (! user) {
       /* syscall exception; set eax and eip */
       f->eip = (void*)f->eax;

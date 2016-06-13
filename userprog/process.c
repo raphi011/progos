@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <hash.h>
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
@@ -19,6 +20,8 @@
 #include "threads/synch.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "vm/page.h"
+
 
 /* data structure to communicate with the thread initializing a new process */
 struct start_aux_data {
@@ -412,6 +415,9 @@ load (int argc, char **argv, void (**eip) (void), void **esp)
   int i;
   char *file_name = argv[0];
 
+  hash_init(&t->pages,page_hash,page_less,NULL);
+
+
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL)
@@ -525,9 +531,7 @@ load (int argc, char **argv, void (**eip) (void), void **esp)
   return success;
 }
 
-/* load() helpers. */
 
-static bool install_page (void *upage, void *kpage, bool writable);
 
 /* Checks whether PHDR describes a valid, loadable segment in
    FILE and returns true if so, false otherwise. */
@@ -595,7 +599,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
-
+  struct thread* thread = thread_current();
   file_seek (file, ofs);
   while (read_bytes > 0 || zero_bytes > 0) {
     /* Calculate how to fill this page.
@@ -603,27 +607,21 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
          and zero the final PAGE_ZERO_BYTES bytes. */
     size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
     size_t page_zero_bytes = PGSIZE - page_read_bytes;
-
+    struct page *page = malloc(sizeof(struct page));
     /* Get a page of memory. */
-    uint8_t *kpage = palloc_get_page (PAL_USER);
-    if (kpage == NULL)
-      return false;
+    
+    page->addr=pg_round_down(upage);
+    page->file=file;
+    page->writable=writable;
+    page->page_read_bytes=page_read_bytes;
+    page->page_zero_bytes=page_zero_bytes;
+    page->ofs=ofs;
 
-    /* Load this page. */
-    if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes) {
-      palloc_free_page (kpage);
-      return false;
-    }
-    memset (kpage + page_read_bytes, 0, page_zero_bytes);
-
-    /* Add the page to the process's address space. */
-    if (!install_page (upage, kpage, writable)) {
-      palloc_free_page (kpage);
-      return false;
-    }
+    hash_insert(&thread->pages,&page->hash_elem);
 
     /* Advance. */
     read_bytes -= page_read_bytes;
+    ofs+=page_read_bytes;
     zero_bytes -= page_zero_bytes;
     upage += PGSIZE;
   }
@@ -699,7 +697,7 @@ setup_stack (void **esp, int argc, char **argv)
    with palloc_get_page().
    Returns true on success, false if UPAGE is already mapped or
    if memory allocation fails. */
-static bool
+bool
 install_page (void *upage, void *kpage, bool writable)
 {
   struct thread *t = thread_current ();
