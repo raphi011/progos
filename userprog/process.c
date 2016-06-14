@@ -599,7 +599,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
-  struct thread* thread = thread_current();
+
   file_seek (file, ofs);
   while (read_bytes > 0 || zero_bytes > 0) {
     /* Calculate how to fill this page.
@@ -607,17 +607,12 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
          and zero the final PAGE_ZERO_BYTES bytes. */
     size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
     size_t page_zero_bytes = PGSIZE - page_read_bytes;
-    struct page *page = malloc(sizeof(struct page));
-    /* Get a page of memory. */
-    
-    page->addr=pg_round_down(upage);
-    page->file=file;
-    page->writable=writable;
-    page->page_read_bytes=page_read_bytes;
-    page->page_zero_bytes=page_zero_bytes;
-    page->ofs=ofs;
 
-    hash_insert(&thread->pages,&page->hash_elem);
+    struct page *page = page_new_file(upage, file, writable, page_read_bytes, page_zero_bytes, ofs);
+
+    if (page == NULL) {
+        return false;
+    }
 
     /* Advance. */
     read_bytes -= page_read_bytes;

@@ -9,9 +9,12 @@
 #include "filesys/filesys.h"
 #include "threads/thread.h"
 
+enum page_type {
+    FILE_T,
+    ZERO_T
+};
+
 struct page {
-	
-	uintptr_t pg_no; //Page number (hash key)
 	struct hash_elem hash_elem; /* Hash table element, like list_elem for example */
 	void *addr; /*Virtual address */
 	struct file *file;
@@ -19,22 +22,26 @@ struct page {
 	size_t page_read_bytes;
 	size_t page_zero_bytes;
 	off_t ofs;
-
-
+        enum page_type type;
 };
 
 struct page *
-page_lookup (const void *address);
+page_lookup (const void *);
 
 bool
-page_less (const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNUSED);
+page_less (const struct hash_elem *, const struct hash_elem *b, void * UNUSED);
 
 unsigned
-page_hash (const struct hash_elem *p_, void *aux UNUSED);
+page_hash (const struct hash_elem *, void * UNUSED);
 
 bool
-page_load(void *fault_addr, void* esp);
+page_load(struct page*);
 
+void
+page_add(struct page*);
 
+struct page*
+page_new_blank(void*, bool, size_t);
 
-
+struct page*
+page_new_file(void *, struct file *, bool, size_t, size_t, off_t);

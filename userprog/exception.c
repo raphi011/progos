@@ -160,15 +160,36 @@ page_fault (struct intr_frame *f)
      which fault_addr refers. */
   if (is_user_vaddr(fault_addr)) {
 
-    if(not_present){
-      if(!page_load(fault_addr,fault_addr)) {
-        thread_exit();
-      } else {
-        return;
+      /* Grow stack */
+      if (fault_addr >= (f->esp - 32)) {
+        struct page *page = page_new_blank(fault_addr, true, PGSIZE);
+
+        if (page == NULL) {
+            thread_exit ();
+
+            if (!page_load(page)) {
+                thread_exit ();
+            } else {
+                return;
+            }
+        }
       }
-    }
 
+      if (not_present && user) {
+          struct page* page = page_lookup(fault_addr);
 
+          /* Unauthorized access or page not found */
+          if (page == NULL || (!page->writable && write)) {
+              thread_exit();
+          }
+
+          /* Try to lazy load the page */
+          if(!page_load (page)) {
+            thread_exit();
+          } else {
+            return;
+          }
+      }
 
     if (! user) {
       /* syscall exception; set eax and eip */

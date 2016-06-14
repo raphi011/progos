@@ -9,6 +9,7 @@
 #include "filesys/file.h"
 #include "userprog/process.h"
 #include "filesys/file.h"
+#include "threads/malloc.h"
 
 
 /* Returns a hash value for page p. */
@@ -43,22 +44,59 @@ page_lookup (const void *address)
   return e != NULL ? hash_entry (e, struct page, hash_elem) : NULL;
 }
 
-bool
-page_load(void *fault_addr, void* esp){
+struct page *
+page_new_blank(void * addr, bool writable, size_t bytes) {
+    struct page *page = malloc(sizeof(struct page));
 
+    page->addr = pg_round_down(addr);
+    page->page_read_bytes = 0;
+    page->page_zero_bytes = bytes;
+    page->writable = writable;
+    page->type = ZERO_T;
+
+    page_add (page);
+
+    return page;
+}
+
+struct page *
+page_new_file(void * addr, struct file *file, bool writable, size_t read_bytes, size_t zero_bytes, off_t ofs) {
+    struct page *page = malloc(sizeof(struct page));
+    /* Get a page of memory. */
+    
+    page->addr = pg_round_down (addr);
+    page->file = file;
+    page->writable = writable;
+    page->page_read_bytes = read_bytes;
+    page->page_zero_bytes = zero_bytes;
+    page->ofs = ofs;
+    page->type = FILE_T;
+
+    page_add (page);
+
+    return page;
+}
+
+void
+page_add(struct page* page) {
+    struct thread* thread = thread_current();
+    hash_insert (&thread->pages, &page->hash_elem);
+}
+
+bool
+page_load(struct page* page) {
+    ASSERT(page != NULL);
   
   uint8_t *kpage = palloc_get_page (PAL_USER);
     if (kpage == NULL)
       return false;
 
-  struct page* page = page_lookup(fault_addr);
-
-  if(page!=NULL){
-
-    if (file_read_at (page->file, kpage, page->page_read_bytes, page->ofs) != (int) page->page_read_bytes) {
-      palloc_free_page (kpage);
-      return false;
-    }
+    if (page->type == FILE_T) {
+        if (file_read_at (page->file, kpage, page->page_read_bytes, page->ofs) != (int) page->page_read_bytes) {
+          palloc_free_page (kpage);
+          return false;
+        }
+    } 
 
     memset (kpage + page->page_read_bytes, 0, page->page_zero_bytes);
 
@@ -67,8 +105,5 @@ page_load(void *fault_addr, void* esp){
       return false;
     }
 
-  }
-
   return true;
-
 }
