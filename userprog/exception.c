@@ -158,33 +158,45 @@ page_fault (struct intr_frame *f)
   /* To implement virtual memory, adapt the rest of the function
      body, adding code that brings in the page to
      which fault_addr refers. */
+
+
   if (is_user_vaddr(fault_addr)) {
-
-      /* Grow stack */
-      if (fault_addr >= (f->esp - 32)) {
-        struct page *page = page_new_blank(fault_addr, true, PGSIZE);
-
-        if (page == NULL) {
-            thread_exit ();
-
-            if (!page_load(page)) {
+      if (not_present) {
+          if (fault_addr >= (f->esp - 32)) {
+            /* Grow stack */
+            
+            if (f->esp < (PHYS_BASE - (8 * 1024 * 1024))) {
+                // printf ("DEBUG: stack too big\n");
                 thread_exit ();
-            } else {
-                return;
             }
-        }
-      }
 
-      if (not_present && user) {
+            struct page *page = page_new_blank(fault_addr, true, PGSIZE);
+
+            if (page == NULL) {
+                thread_exit ();
+            } else  {
+                // printf ("DEBUG: extending stack\n");
+                if (!page_load(page)) {
+                    // printf ("DEBUG: extending stack failed\n");
+                    thread_exit ();
+                } else {
+                    // printf ("DEBUG: extended stack\n");
+                    return;
+                }
+            }
+          } 
+
           struct page* page = page_lookup(fault_addr);
 
           /* Unauthorized access or page not found */
           if (page == NULL || (!page->writable && write)) {
+              // printf ("DEBUG: unauthorized access or page not found\n");
               thread_exit();
           }
 
           /* Try to lazy load the page */
           if(!page_load (page)) {
+             // printf ("DEBUG: lazy loading of page failed\n");
             thread_exit();
           } else {
             return;
