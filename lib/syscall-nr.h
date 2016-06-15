@@ -19,7 +19,7 @@ enum
     SYS_TELL,                   /* Report current position in a file. */
     SYS_CLOSE,                  /* Close a file. */
 
-    /* Project 3 and optionally project 4. */
+    /* Project 3 and optionally project 4. mroe like project 2*/
     SYS_MMAP,                   /* Map a file into memory. */
     SYS_MUNMAP,                 /* Remove a memory mapping. */
 

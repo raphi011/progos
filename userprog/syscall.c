@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <syscall-nr.h>
+#include <hash.h>
 #include "devices/input.h"
 #include "devices/shutdown.h"
 #include "filesys/file.h"
@@ -14,6 +15,7 @@
 #include "userprog/pagedir.h"
 #include "userprog/process.h"
 #include "userprog/syscall.h"
+#include "vm/page.h"
 
 #define STACK_SLOT_SIZE sizeof(int)
 
@@ -178,7 +180,8 @@ static handler
   syscall_read,
   syscall_seek,
   syscall_tell,
-  syscall_close;
+  syscall_close,
+  mmap;
 
 /* Register syscall_handler for interrupt 0x30 */
 void
@@ -214,6 +217,7 @@ syscall_handler (struct intr_frame *f)
   case SYS_SEEK: fp = syscall_seek; break;
   case SYS_TELL: fp = syscall_tell; break;
   case SYS_CLOSE: fp = syscall_close; break;
+  case SYS_MMAP: fp = mmap; break;
   default:
     goto fail;
   }
@@ -560,4 +564,85 @@ syscall_close (void *sp, bool *segfault)
   /* no way to return something sensible function (void) */
   (void) process_close_file (fd);
   return 0;
+}
+
+static int
+mmap(void *sp, bool *segfault){
+  static int ID = 0;
+
+  int fd;
+  void *addr;
+
+  /* get arguments */
+  if(!copy_from_user(&fd, STACK_ADDR (sp,1)) || !copy_from_user(&addr,STACK_ADDR(sp,2))){
+    *segfault = true;
+    return 0;
+  }
+
+  /* It must fail if addr is 0, because some Pintos code assumes virtual page 0 is not mapped. */
+  if(addr == 0 || addr == NULL){
+    //thread_exit();
+    return -1;
+  }
+
+  /* It must fail if addr is not page-aligned */
+  if((uint32_t)addr % PGSIZE != 0)
+    return -1;
+
+  if(fd < 2)
+    return -1; //the first two file descriptors are always reserved stdin stdout
+
+  struct file *file = process_get_file(fd); 
+  if(file == NULL)
+    return -1; // file not found/opened, cannot map what has not been opened
+
+  //reopen the file so we are independent from the fd
+  file = file_reopen(file);
+
+  if(file == NULL)
+    return -1;
+
+  uint32_t size = file_length(file);
+  struct thread *thread = thread_current();
+  if(size == 0)
+    return -1;
+  uint32_t read_bytes = size;
+  uint32_t zero_bytes = size;
+  off_t ofs = 0;
+  //struct thread *thread = thread_current();
+  struct mmap_entry *mapping = malloc(sizeof (struct mmap_entry));
+  hash_init(&mapping->pages,page_hash,page_less,NULL);
+  mapping->ID=++ID;
+  mapping->entries = 0;
+
+  /* it must fail if the range of pages mapped overlaps any 
+  existing set of mapped pages, including the stack or pages mapped at executable load time. */
+  uint32_t i;
+  for(i = (uint32_t)addr; i< (uint32_t)addr + size ; i+=PGSIZE){
+    if(page_lookup(i) != NULL)
+      return -1; 
+  }
+
+  while(read_bytes > 0 || zero_bytes>0) {
+    mapping->entries = mapping->entries++;
+    size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+    size_t page_zero_bytes = PGSIZE - page_read_bytes;
+
+    struct page *page = page_new_file(addr, file, true, page_read_bytes, page_zero_bytes, ofs);
+    
+
+    if (page == NULL) {
+        return -1;
+    }
+    hash_insert(&mapping->pages, &page->map_elem);
+    /* Advance. */
+    read_bytes -= page_read_bytes;
+    ofs+=page_read_bytes;
+    zero_bytes -= page_zero_bytes;
+    addr += PGSIZE;
+
+  }
+
+  map_add(mapping);
+  return ID;
 }

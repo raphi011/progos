@@ -416,7 +416,7 @@ load (int argc, char **argv, void (**eip) (void), void **esp)
   char *file_name = argv[0];
 
   hash_init(&t->pages,page_hash,page_less,NULL);
-
+  hash_init(&t->mmaps,mmap_hash,mmap_less,NULL);
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();

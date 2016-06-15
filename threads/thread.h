@@ -96,7 +96,7 @@ struct thread
     /* Shared between thread.c and synch.c */
     struct list_elem elem;              /* List element. */
     struct hash pages;
-
+    struct hash mmaps;
 
     /* priority scheduler */
     struct lock *lock_wait;

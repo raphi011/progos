@@ -83,6 +83,12 @@ page_add(struct page* page) {
     hash_insert (&thread->pages, &page->hash_elem);
 }
 
+void
+map_add(struct mmap_entry* mmap_entry) {
+    struct thread* thread = thread_current();
+    hash_insert (&thread->mmaps, &mmap_entry->hash_elem);
+}
+
 bool
 page_load(struct page* page) {
     ASSERT(page != NULL);
@@ -106,4 +112,35 @@ page_load(struct page* page) {
     }
 
   return true;
+}
+
+/* Returns a hash value for mmap m. */
+unsigned
+mmap_hash (const struct hash_elem *p_, void *aux UNUSED)
+{
+  const struct mmap_entry *p = hash_entry (p_, struct mmap_entry, hash_elem);
+  return hash_bytes (&p->ID, sizeof p->ID);
+}
+
+/* Returns true if mmap entry a precedes mmap entry b. */
+bool
+mmap_less (const struct hash_elem *a_, const struct hash_elem *b_,
+           void *aux UNUSED)
+{
+  const struct mmap_entry *a = hash_entry (a_, struct mmap_entry, hash_elem);
+  const struct mmap_entry *b = hash_entry (b_, struct mmap_entry, hash_elem);
+
+  return a->ID < b->ID;
+}
+
+
+struct mmap_entry *
+mmap_lookup (const int ID)
+{
+  struct mmap_entry p;
+  struct hash_elem *e;
+  struct thread *thread = thread_current();
+  p.ID = ID;
+  e = hash_find (&thread->mmaps, &p.hash_elem);
+  return e != NULL ? hash_entry (e, struct mmap_entry, hash_elem) : NULL;
 }
