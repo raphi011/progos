@@ -30,8 +30,9 @@ struct page {
 struct mmap_entry {
 	struct hash_elem hash_elem;
 	struct hash pages;
-	int entries;
+	int entries; // DEBUG: not used for now, since apparently hash tables have iterating functions
 	struct page* page;
+	struct file *file;
 	int ID;
 };
 

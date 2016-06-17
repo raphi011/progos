@@ -9,6 +9,7 @@
 #include "lib/string.h"
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
@@ -181,6 +182,7 @@ static handler
   syscall_seek,
   syscall_tell,
   syscall_close,
+  munmap,
   mmap;
 
 /* Register syscall_handler for interrupt 0x30 */
@@ -217,6 +219,7 @@ syscall_handler (struct intr_frame *f)
   case SYS_SEEK: fp = syscall_seek; break;
   case SYS_TELL: fp = syscall_tell; break;
   case SYS_CLOSE: fp = syscall_close; break;
+  case SYS_MUNMAP: fp = munmap; break;
   case SYS_MMAP: fp = mmap; break;
   default:
     goto fail;
@@ -569,10 +572,10 @@ syscall_close (void *sp, bool *segfault)
 static int
 mmap(void *sp, bool *segfault){
   static int ID = 0;
-
+  
   int fd;
   void *addr;
-
+  struct thread *thread = thread_current();
   /* get arguments */
   if(!copy_from_user(&fd, STACK_ADDR (sp,1)) || !copy_from_user(&addr,STACK_ADDR(sp,2))){
     *segfault = true;
@@ -603,46 +606,88 @@ mmap(void *sp, bool *segfault){
     return -1;
 
   uint32_t size = file_length(file);
-  struct thread *thread = thread_current();
+  
   if(size == 0)
     return -1;
   uint32_t read_bytes = size;
   uint32_t zero_bytes = size;
   off_t ofs = 0;
-  //struct thread *thread = thread_current();
+  
   struct mmap_entry *mapping = malloc(sizeof (struct mmap_entry));
   hash_init(&mapping->pages,page_hash,page_less,NULL);
   mapping->ID=++ID;
   mapping->entries = 0;
-
+  mapping->file = file;
   /* it must fail if the range of pages mapped overlaps any 
   existing set of mapped pages, including the stack or pages mapped at executable load time. */
   uint32_t i;
   for(i = (uint32_t)addr; i< (uint32_t)addr + size ; i+=PGSIZE){
-    if(page_lookup(i) != NULL)
+    if(page_lookup((void *)i) != NULL)
       return -1; 
+    if(pagedir_get_page(thread->pagedir,(void *)i))
+      return -1;
   }
-
   while(read_bytes > 0 || zero_bytes>0) {
-    mapping->entries = mapping->entries++;
+    //mapping->entries = mapping->entries++;
     size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
     size_t page_zero_bytes = PGSIZE - page_read_bytes;
-
+    
     struct page *page = page_new_file(addr, file, true, page_read_bytes, page_zero_bytes, ofs);
     
 
     if (page == NULL) {
         return -1;
     }
-    hash_insert(&mapping->pages, &page->map_elem);
+    hash_insert(&mapping->pages, &page->map_elem); 
     /* Advance. */
     read_bytes -= page_read_bytes;
     ofs+=page_read_bytes;
     zero_bytes -= page_zero_bytes;
     addr += PGSIZE;
 
-  }
+  } 
 
   map_add(mapping);
   return ID;
+}
+
+static int
+munmap(void *sp, bool *segfault){
+  while(1){
+    int i = 0;
+    i++;
+  }
+   int mapping;
+   /*get arguments */
+  if (! copy_from_user (&mapping, STACK_ADDR (sp,1))) {
+    *segfault = true;
+    return 0;
+  }
+
+  struct mmap_entry *mmap = mmap_lookup(mapping);
+
+  if(mmap == NULL)
+    return 0;
+
+
+  struct hash_iterator i;
+  struct thread *thread = thread_current();
+  hash_first (&i, &mmap->pages);
+  while (hash_next (&i))
+  {
+    struct page *page = hash_entry (hash_cur (&i), struct page, map_elem);
+    if(page != NULL){
+      void *kpage = pagedir_get_page(thread->pagedir,page->addr);
+      if(kpage != NULL){
+      file_write_at(page->file, kpage, page->page_read_bytes,page->ofs);
+      pagedir_clear_page(thread->pagedir,page->addr);
+      //hash_delete(&thread->pages,&page->hash_elem);
+    }
+
+
+  }
+    
+  }
+
+  //hash_delete(&thread->mmaps,&mmap->hash_elem);
 }
